@@ -1,4 +1,3 @@
-
 name := "sbt-s3"
 
 description := "S3 Plugin for sbt"
@@ -19,7 +18,6 @@ publishMavenStyle := false
 sbtVersion in Global := "0.13.5"
 
 scalaVersion in Global := "2.10.4"
-
 
 pomExtra := {
   <url>https://github.com/Morgaroth/sbt-s3</url>
