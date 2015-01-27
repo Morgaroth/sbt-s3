@@ -1,35 +1,44 @@
-import bintray.Keys._
 
 name := "sbt-s3"
 
 description := "S3 Plugin for sbt"
 
-version := "0.8"
+version := "0.10-SNAPSHOT"
 
-organization := "com.typesafe.sbt"
-
-organizationName := "Typesafe"
+organization := "io.github.morgaroth"
 
 sbtPlugin := true
 
-startYear := Some(2013)
-
-libraryDependencies ++= Seq("com.amazonaws" % "aws-java-sdk" % "1.3.29",
-                            "commons-lang" % "commons-lang" % "2.6")
-
-scalacOptions in (Compile,doc) <++= (name,description,version,sourceDirectory) map {(n,d,v,s) =>
-   Opts.doc.title(n+": "+d) ++ Opts.doc.version(v) ++ Seq("-doc-root-content", (s / "main/rootdoc.txt").getAbsolutePath())}
+libraryDependencies ++= Seq(
+  "com.amazonaws" % "aws-java-sdk" % "1.9.16",
+  "commons-lang" % "commons-lang" % "2.6"
+)
 
 publishMavenStyle := false
 
-sbtVersion in Global := "0.13.1"
+sbtVersion in Global := "0.13.5"
 
-scalaVersion in Global := "2.10.3"
+scalaVersion in Global := "2.10.4"
 
-bintrayPublishSettings
 
-repository in bintray := "sbt-plugins"
-
-licenses += ("BSD", url("http://directory.fsf.org/wiki/License:BSD_4Clause"))
-
-bintrayOrganization in bintray := None
+pomExtra := {
+  <url>https://github.com/Morgaroth/sbt-s3</url>
+    <licenses>
+      <license>
+        <name>Apache 2</name>
+        <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      </license>
+    </licenses>
+    <scm>
+      <connection>scm:git:git@github.com:Morgaroth/sbt-s3.git</connection>
+      <developerConnection>scm:git:git@github.com:Morgaroth/sbt-s3.git</developerConnection>
+      <url>https://github.com/Morgaroth/sbt-s3</url>
+    </scm>
+    <developers>
+      <developer>
+        <id>Morgaroth</id>
+        <name>Mateusz Jaje</name>
+        <url>http://morgaroth.github.io/</url>
+      </developer>
+    </developers>
+}

@@ -7,36 +7,30 @@
 ## Usage
 
 * add to your project/plugin.sbt the line:
-   `addSbtPlugin("com.typesafe.sbt" % "sbt-s3" % "0.8")`
+   `addSbtPlugin("io.github.morgaroth" % "sbt-s3" % "0.10")`
 * then add to your build.sbt the line:
-   `s3Settings`
+   enablePlugins(S3Plugin)
  
-You will then be able to use the tasks s3-upload, s3-download, and s3-delete, defined
-in the nested object `com.typesafe.sbt.S3Plugin.S3` as upload, download, and delete, respectively.
+You will then be able to use the tasks s3-upload, s3-download and s3-delete commands
 All these operations will use HTTPS as a transport protocol.
  
-Please check the Scaladoc API of the `S3Plugin` object, and of its nested `S3` object,
-to get additional documentation of the available sbt tasks.
-
 ## Example
 
 Here is a complete example:
 
 project/plugin.sbt:
     
-    addSbtPlugin("com.typesafe.sbt" % "sbt-s3" % "0.8")
+    addSbtPlugin("io.github.morgaroth" % "sbt-s3" % "0.10")
 
 build.sbt:
 
-    import S3._
+```scala
+mappings in upload := Seq((new java.io.File("a"),"zipa.txt"),(new java.io.File("b"),"pongo/zipb.jar"))
 
-    s3Settings
+host in upload := "s3sbt-test.s3.amazonaws.com"
 
-    mappings in upload := Seq((new java.io.File("a"),"zipa.txt"),(new java.io.File("b"),"pongo/zipb.jar"))
-
-    host in upload := "s3sbt-test.s3.amazonaws.com"
-
-    credentials += Credentials(Path.userHome / ".s3credentials")
+credentials += Credentials(Path.userHome / ".s3credentials")
+```
 
 ~/.s3credentials:
 

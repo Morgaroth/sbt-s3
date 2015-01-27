@@ -1,12 +1,12 @@
-package com.typesafe.sbt
+package io.github.morgaroth.sbt.s3
 
-import sbt.{File => _, _}
-import java.io.File
-import Keys._
-import com.amazonaws._
-import auth._,services.s3._
-import model._
-import org.apache.commons.lang.StringUtils.removeEndIgnoreCase
+import com.amazonaws.auth.BasicAWSCredentials
+import com.amazonaws.services.s3.AmazonS3Client
+import com.amazonaws.services.s3.model.ProgressListener
+import com.amazonaws.{AmazonWebServiceRequest, ClientConfiguration, Protocol}
+import org.apache.commons.lang.StringUtils._
+import sbt.Keys._
+import sbt.{AutoPlugin, Credentials, SettingKey, TaskKey}
 
 /**
   * S3Plugin is a simple sbt plugin that can manipulate objects on Amazon S3.
@@ -15,13 +15,10 @@ import org.apache.commons.lang.StringUtils.removeEndIgnoreCase
   * Here is a complete example:
   *
   *  - project/plugin.sbt:
-  * {{{addSbtPlugin("com.typesafe.sbt" % "sbt-s3" % "0.8")}}}
+  * {{{addSbtPlugin("io.github.morgaroth" % "sbt-s3" % "0.10")}}}
   *
   *  - build.sbt:
   * {{{
-  * import S3._
-  *
-  * s3Settings
   *
   * mappings in upload := Seq((new java.io.File("a"),"zipa.txt"),(new java.io.File("b"),"pongo/zipb.jar"))
   *
@@ -53,12 +50,12 @@ import org.apache.commons.lang.StringUtils.removeEndIgnoreCase
   *
   *  Please select the nested `S3` object link, below, for additional information on the available tasks.
   */
-object S3Plugin extends sbt.Plugin {
+object S3Plugin extends AutoPlugin {
 
   /**
     * This nested object defines the sbt keys made available by the S3Plugin: read here for tasks info.
     */
-  object S3 {
+  object autoImport {
 
   /**
     * The task "s3-upload" uploads a set of files to a specificed S3 bucket.
@@ -134,7 +131,7 @@ object S3Plugin extends sbt.Plugin {
 
   }
 
-  import S3._
+  import autoImport._
 
   type Bucket=String
 
