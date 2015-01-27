@@ -1,10 +1,9 @@
 package io.github.morgaroth.sbt.s3
 
 import com.amazonaws.auth.BasicAWSCredentials
-import com.amazonaws.event.{ProgressEvent, ProgressEventType, ProgressListener}
 import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model.{GetObjectRequest, PutObjectRequest}
-import com.amazonaws.{AmazonWebServiceRequest, ClientConfiguration, Protocol}
+import com.amazonaws.{ClientConfiguration, Protocol}
 import org.apache.commons.lang.StringUtils._
 import sbt.Keys._
 import sbt.{AutoPlugin, Credentials, TaskKey, _}
@@ -53,7 +52,7 @@ import scala.language.reflectiveCalls
  *
  * Please select the nested `S3` object link, below, for additional information on the available tasks.
  */
-object S3Plugin extends AutoPlugin {
+object S3Plugin extends AutoPlugin with progressHelpers {
 
   /**
    * This nested object defines the sbt keys made available by the S3Plugin: read here for tasks info.
@@ -76,7 +75,7 @@ object S3Plugin extends AutoPlugin {
      *
      * If you set logLevel to "Level.Debug", the list of files will be printed while uploading.
      */
-    val s3Upload = taskKey[Unit]("Uploads files to an S3 bucket.")
+    val s3Upload = taskKey[Seq[UploadResult]]("Uploads files to an S3 bucket.")
 
     /**
      * The task "s3-download" downloads a set of files from a specificed S3 bucket.
@@ -94,7 +93,7 @@ object S3Plugin extends AutoPlugin {
      *
      * If you set logLevel to "Level.Debug", the list of files will be printed while downloading.
      */
-    val s3Download = taskKey[Unit]("Downloads files from an S3 bucket.")
+    val s3Download = taskKey[Seq[DownloadResult]]("Downloads files from an S3 bucket.")
 
     /**
      * The task "s3-delete" deletes a set of files from a specificed S3 bucket.
@@ -112,7 +111,7 @@ object S3Plugin extends AutoPlugin {
      *
      * If you set logLevel to "Level.Debug", the list of keys will be printed while the S3 objects are being deleted.
      */
-    val s3Delete = taskKey[Unit]("Delete files from an S3 bucket.")
+    val s3Delete = taskKey[Seq[Unit]]("Delete files from an S3 bucket.")
 
     /**
      * A string representing the S3 bucket name, in one of two forms:
@@ -150,75 +149,32 @@ object S3Plugin extends AutoPlugin {
 
   private def getBucket(host: String) = removeEndIgnoreCase(host, ".s3.amazonaws.com")
 
-  private def s3InitTask[Item](thisTask: TaskKey[Unit], itemsKey: TaskKey[Seq[Item]],
-                               op: (AmazonS3Client, Bucket, Item, Boolean) => Unit,
-                               msg: (Bucket, Item) => String, lastMsg: (Bucket, Seq[Item]) => String) =
+  private def s3InitTask[Item, OperationResult](thisTask: TaskKey[Seq[OperationResult]], itemsKey: TaskKey[Seq[Item]],
+                                                operation: (AmazonS3Client, Bucket, Item, Boolean) => OperationResult,
+                                                msg: (Bucket, Item) => String, lastMsg: (Bucket, Seq[Item]) => String) =
 
     (credentials in thisTask, itemsKey in thisTask, s3Host in thisTask, s3Progress in thisTask, streams) map {
       (creds, items, host, progress, streams) =>
         val client = getClient(creds, host)
         val bucket = getBucket(host)
-        items foreach { item =>
+        val result = items map { item =>
           streams.log.debug(msg(bucket, item))
-          op(client, bucket, item, progress)
+          operation(client, bucket, item, progress)
         }
         streams.log.info(lastMsg(bucket, items))
+        result
     }
-
-
-  private def progressBar(percent: Int) = {
-    val b = "=================================================="
-    val s = "                                                 "
-    val p = percent / 2
-    val z: StringBuilder = new StringBuilder(80)
-    z.append("\r[")
-    z.append(b.substring(0, p))
-    if (p < 50) {
-      z.append(">")
-      z.append(s.substring(p))
-    }
-    z.append("]   ")
-    if (p < 5) z.append(" ")
-    if (p < 50) z.append(" ")
-    z.append(percent)
-    z.append("%   ")
-    z.mkString
-  }
-
-  private def addProgressListener(request: AmazonWebServiceRequest {// structural
-  def setGeneralProgressListener(progressListener: ProgressListener): Unit
-  }, fileSize: Long, key: String) = request.setGeneralProgressListener(new ProgressListener() {
-    var uploadedBytes = 0L
-    val fileName = {
-      val area = 30
-      val n = new File(key).getName
-      val l = n.length()
-      if (l > area - 3)
-        "..." + n.substring(l - area + 3)
-      else
-        n
-    }
-
-    def progressChanged(progressEvent: ProgressEvent) {
-      if (progressEvent.getEventType == ProgressEventType.TRANSFER_PART_COMPLETED_EVENT) {
-        uploadedBytes = uploadedBytes + progressEvent.getBytesTransferred
-      }
-      print(progressBar(if (fileSize > 0) ((uploadedBytes * 100) / fileSize).toInt else 100))
-      print(fileName)
-      if (progressEvent.getEventType == ProgressEventType.TRANSFER_COMPLETED_EVENT)
-        println()
-    }
-  })
 
   /*
    * Include the line {{{s3Settings}}} in your build.sbt file, in order to import the tasks defined by this S3 plugin.
    */
   val s3Settings = Seq(
 
-    s3Upload <<= s3InitTask[(File, String)](s3Upload, mappings, { case (client, bucket, (file, key), progress) =>
+    s3Upload <<= s3InitTask[(File, String), UploadResult](s3Upload, mappings, { case (client, bucket, (file, key), progress) =>
       val request = new PutObjectRequest(bucket, key, file)
       if (progress) addProgressListener(request, file.length(), key)
       client.putObject(request)
+      UploadResult(file)
     }, {
       case (bucket, (file, key)) => "Uploading %s as %s into %s.".format(file.getAbsolutePath, key, bucket)
     }, {
@@ -226,11 +182,12 @@ object S3Plugin extends AutoPlugin {
     }
     ),
 
-    s3Download <<= s3InitTask[(File, String)](s3Download, mappings, { case (client, bucket, (file, key), progress) =>
+    s3Download <<= s3InitTask[(File, String), DownloadResult](s3Download, mappings, { case (client, bucket, (file, key), progress) =>
       val request = new GetObjectRequest(bucket, key)
       val objectMetadata = client.getObjectMetadata(bucket, key)
       if (progress) addProgressListener(request, objectMetadata.getContentLength, key)
       client.getObject(request, file)
+      DownloadResult(file)
     }, {
       case (bucket, (file, key)) => "Downloading %s as %s from %s".format(file.getAbsolutePath, key, bucket)
     }, {
@@ -238,7 +195,9 @@ object S3Plugin extends AutoPlugin {
     }
     ),
 
-    s3Delete <<= s3InitTask[String](s3Delete, s3Keys, { (client, bucket, key, _) => client.deleteObject(bucket, key)}, {
+    s3Delete <<= s3InitTask[String, Unit](s3Delete, s3Keys, {
+      (client, bucket, key, _) => client.deleteObject(bucket, key)
+    }, {
       (bucket, key) => "Deleting %s from %s.".format(key, bucket)
     }, {
       (bucket, keys1) => "Deleted %d objects from the S3 bucket \"%s\".".format(keys1.length, bucket)
@@ -249,6 +208,11 @@ object S3Plugin extends AutoPlugin {
     s3Keys := Seq(),
     mappings in s3Download := Seq(),
     mappings in s3Upload := Seq(),
-    s3Progress := false
+    s3Progress := true
   )
+
+  case class UploadResult(inputFile: File)
+
+  case class DownloadResult(outputFile: File)
+
 }
