@@ -7,8 +7,6 @@ name := "sbt-s3"
 
 description := "S3 Plugin for sbt"
 
-version := "0.10-SNAPSHOT"
-
 organization := "io.github.morgaroth"
 
 sbtPlugin := true
