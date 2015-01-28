@@ -184,7 +184,7 @@ object S3Plugin extends AutoPlugin with progressHelpers {
       case (client, bucket, (file, key), progress) =>
       val request = new PutObjectRequest(bucket, key, file)
       if (progress) addProgressListener(request, file.length(), key)
-//      client.putObject(request)
+      client.putObject(request)
       UploadResult(file)
     }, {
       case (bucket, (file, key)) => "Uploading %s as %s into %s.".format(file.getAbsolutePath, key, bucket)
