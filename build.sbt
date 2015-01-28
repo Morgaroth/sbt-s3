@@ -66,6 +66,8 @@ scriptedLaunchOpts := { scriptedLaunchOpts.value ++
 
 scriptedBufferLog := false
 
+publishMavenStyle := true
+
 pomExtra := {
   <url>https://github.com/Morgaroth/sbt-s3</url>
     <licenses>
