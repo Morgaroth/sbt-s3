@@ -1,12 +1,13 @@
 package io.github.morgaroth.sbt.s3
 
-import com.amazonaws.auth.{InstanceProfileCredentialsProvider, BasicAWSCredentials}
+import com.amazonaws.auth.{AWSCredentialsProvider, InstanceProfileCredentialsProvider, BasicAWSCredentials}
 import com.amazonaws.internal.StaticCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model.{GetObjectRequest, PutObjectRequest}
 import com.amazonaws.{ClientConfiguration, Protocol}
 import org.apache.commons.lang.StringUtils._
 import sbt.Keys._
+import sbt.Scoped.RichTaskable3
 import sbt.{AutoPlugin, Credentials, TaskKey, _}
 
 import scala.language.reflectiveCalls
@@ -139,6 +140,8 @@ object S3Plugin extends AutoPlugin with progressHelpers {
      * Only recommended for code running in EC2 machines. Default is false.
      */
     val s3UseInstanceProfileCredentials = settingKey[Boolean]("Set to true to getting credentials inside EC2 machine (default false).")
+
+    val s3PrintCredentials = taskKey[Unit]("Prints setting used to connect to AWS.")
   }
 
   import io.github.morgaroth.sbt.s3.S3Plugin.autoImport._
@@ -146,14 +149,19 @@ object S3Plugin extends AutoPlugin with progressHelpers {
   type Bucket = String
 
   private def getClient(creds: Seq[Credentials], host: String, useInstanceProfileCredentials: Boolean) = {
-    val credentialsProvider = Credentials.forHost(creds, host) match {
-      case Some(cred) => new StaticCredentialsProvider(new BasicAWSCredentials(cred.userName, cred.passwd))
-      case None if useInstanceProfileCredentials => new InstanceProfileCredentialsProvider
-      case _ => sys.error("Could not find S3 credentials for the host: %s.".format(host))
-    }
+    val credentialsProvider = getCredentials(creds, host, useInstanceProfileCredentials)._1
     new AmazonS3Client(credentialsProvider, new ClientConfiguration().withProtocol(Protocol.HTTPS))
   }
 
+  def getCredentials(creds: Seq[Credentials], host: String, useInstanceProfileCredentials: Boolean) = {
+    Credentials.forHost(creds, host) match {
+      case Some(cred) => new StaticCredentialsProvider(new BasicAWSCredentials(cred.userName, cred.passwd)) -> Left(cred)
+      case None if useInstanceProfileCredentials =>
+        val instance = new InstanceProfileCredentialsProvider
+        instance -> Right(instance) // for get both amazon credentials and direct sbt credentials too
+      case _ => sys.error("Could not find S3 credentials for the host: %s.".format(host))
+    }
+  }
 
   private def getBucket(host: String) = removeEndIgnoreCase(host, ".s3.amazonaws.com")
 
@@ -173,19 +181,28 @@ object S3Plugin extends AutoPlugin with progressHelpers {
         result
     }
 
+  def printCredentials: RichTaskable3[Seq[Credentials], TaskStreams, String]#App[Unit] = {
+    (credentials, streams, s3Host, s3UseInstanceProfileCredentials) map { (creds, streams, host, useInstanceProfileCredentials) =>
+      val credentials = getCredentials(creds, host, useInstanceProfileCredentials)._2.left
+      credentials.map { cred =>
+        streams.log.info("\taccess id:\t%s".format(cred.userName.replaceFirst( """.{15}""", "*****")))
+        streams.log.info("\taccess key:\t%s".format(cred.passwd.replaceFirst( """.{35}""", "*****")))
+      }
+    }
+  }
+
   /*
    * Include the line {{{s3Settings}}} in your build.sbt file, in order to import the tasks defined by this S3 plugin.
    */
 
   override def projectSettings = Seq(
 
-    s3Upload <<= s3InitTask[(File, String), UploadResult](s3Upload, mappings,
-    {
+    s3Upload <<= s3InitTask[(File, String), UploadResult](s3Upload, mappings, {
       case (client, bucket, (file, key), progress) =>
-      val request = new PutObjectRequest(bucket, key, file)
-      if (progress) addProgressListener(request, file.length(), key)
-      client.putObject(request)
-      UploadResult(file)
+        val request = new PutObjectRequest(bucket, key, file)
+        if (progress) addProgressListener(request, file.length(), key)
+        client.putObject(request)
+        UploadResult(file)
     }, {
       case (bucket, (file, key)) => "Uploading %s as %s into %s.".format(file.getAbsolutePath, key, bucket)
     }, {
@@ -214,6 +231,8 @@ object S3Plugin extends AutoPlugin with progressHelpers {
       (bucket, keys1) => "Deleted %d objects from the S3 bucket \"%s\".".format(keys1.length, bucket)
     }
     ),
+
+    s3PrintCredentials <<= printCredentials,
 
     s3Host := "",
     s3Keys := Seq(),
