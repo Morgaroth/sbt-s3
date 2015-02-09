@@ -12,7 +12,7 @@ organization := "io.github.morgaroth"
 sbtPlugin := true
 
 libraryDependencies ++= Seq(
-  "com.amazonaws" % "aws-java-sdk-s3" % "1.9.16",
+  "com.amazonaws" % "aws-java-sdk-s3" % "1.9.17",
   "commons-lang" % "commons-lang" % "2.6"
 )
 
